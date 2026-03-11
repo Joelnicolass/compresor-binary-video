@@ -104,8 +104,8 @@ Encoder invoca FFmpeg vía `child_process.spawn`:
 
 - Entrada (`stdin` de FFmpeg):
   - `-f rawvideo`, `-pixel_format rgb24`, `-video_size 1920x1080`, `-framerate 10`, `-i pipe:0`.
-- Modo lossy (pensado para YouTube):
-  - `-r 30` (duplica frames), `-c:v libx264`, `-preset fast`, `-crf 18`, `-pix_fmt yuv420p`, salida `.mp4`.
+- Modo lossy (pensado para YouTube y round-trip decodificable):
+  - `-r 10`, `-c:v libx264`, `-profile:v main`, `-preset medium`, `-crf 14`, `-pix_fmt yuv420p`, `-movflags +faststart`, salida `.mp4`.
 - Modo lossless (pruebas locales):
   - `-c:v ffv1`, `-pix_fmt rgb24`, `-r 10`, salida `.mkv`.
 
@@ -341,6 +341,38 @@ docker run --rm -p 3000:3000 youtube-infinite-storage
 ```
 
 FFmpeg y `youtube-dl-exec` quedan instalados dentro de la imagen; solo necesitas exponer el puerto.
+
+### 4.1. Subir la imagen a Docker Hub
+
+1. **Crear cuenta** en [Docker Hub](https://hub.docker.com) si no tienes una.
+
+2. **Iniciar sesión** en la CLI:
+   ```bash
+   docker login
+   ```
+   (Usuario y contraseña de Docker Hub.)
+
+3. **Construir** la imagen (si aún no lo hiciste):
+   ```bash
+   docker build -t youtube-infinite-storage .
+   ```
+
+4. **Etiquetar** la imagen con tu usuario y nombre del repositorio en Docker Hub:
+   ```bash
+   docker tag youtube-infinite-storage TU_USUARIO/youtube-infinite-storage:latest
+   ```
+   Sustituye `TU_USUARIO` por tu usuario de Docker Hub. Puedes usar otro nombre de repositorio (ej. `compresor`) y otra etiqueta (ej. `v1.0`) en lugar de `latest`.
+
+5. **Subir** la imagen:
+   ```bash
+   docker push TU_USUARIO/youtube-infinite-storage:latest
+   ```
+
+6. **Ejecutar la imagen desde Docker Hub** (en otra máquina o para compartir):
+   ```bash
+   docker pull TU_USUARIO/youtube-infinite-storage:latest
+   docker run --rm -p 3000:3000 TU_USUARIO/youtube-infinite-storage:latest
+   ```
 
 ---
 
