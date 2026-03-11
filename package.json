@@ -1,0 +1,20 @@
+{
+  "name": "compresor",
+  "version": "1.0.0",
+  "description": "YouTube Infinite Storage - Encoder MVP API",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.1",
+    "youtube-dl-exec": "^3.1.3"
+  }
+}
