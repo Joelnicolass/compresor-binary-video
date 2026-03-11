@@ -2,10 +2,10 @@
 
 API en Node.js + Express que transforma cualquier archivo binario en un video y permite hacer el camino inverso (video → archivo), pensando en subir el video a YouTube como “medio de almacenamiento”.
 
-- **Stack**: Node 20, Express, FFmpeg, `youtube-dl-exec` (yt-dlp), ESM.
-- **Formato visual**: 1920×1080, bloques 40×40, 48×27 = 1296 bloques por frame.
+- **Stack**: Node 24, Express, FFmpeg, `youtube-dl-exec` (yt-dlp), ESM.
+- **Formato visual**: 640×360 (360p), bloques 20×20, 32×18 = 576 bloques por frame (menor resolución = videos más ligeros).
 - **Información por bloque**: 3 bits (Base‑8), mapeados a una paleta fija de 8 colores RGB.
-- **Capacidad por frame**: 1296 bloques × 3 bits = 3888 bits ≈ 486 bytes.
+- **Capacidad por frame**: 576 bloques × 3 bits = 1728 bits ≈ 216 bytes.
 
 ---
 
@@ -34,14 +34,14 @@ Archivo principal: `src/encoder/encode.js`.
 
 ### Parámetros visuales (en `encoderConfig`)
 
-- `WIDTH = 1920`, `HEIGHT = 1080`.
-- `BLOCK_SIZE = 40` → 1920 / 40 = 48 columnas, 1080 / 40 = 27 filas.
-- `FPS = 10` (frames generados realmente; para H.264 se duplica a 30fps si se usa modo lossy).
+- `WIDTH = 640`, `HEIGHT = 360` (360p para minimizar peso del video).
+- `BLOCK_SIZE = 20` → 640 / 20 = 32 columnas, 360 / 20 = 18 filas.
+- `FPS = 10`.
 - **Paleta Base‑8**: 8 colores RGB puros:
   - 000: negro, 001: rojo, 010: verde, 011: azul,
   - 100: amarillo, 101: cian, 110: magenta, 111: blanco.
 
-Cada bloque 40×40 tiene **un solo color**, elegido según 3 bits de datos.
+Cada bloque 20×20 tiene **un solo color**, elegido según 3 bits de datos.
 
 ### BitReader (lectura de 3 en 3 bits)
 
@@ -79,8 +79,8 @@ En el decoder:
 En `encodeFileToStream`:
 
 1. Se calcula:
-   - `COLS = WIDTH / BLOCK_SIZE = 48`.
-   - `ROWS = HEIGHT / BLOCK_SIZE = 27`.
+   - `COLS = WIDTH / BLOCK_SIZE = 32`.
+   - `ROWS = HEIGHT / BLOCK_SIZE = 18`.
    - `FRAME_SIZE = WIDTH * HEIGHT * 3` (RGB24).
 2. Para cada frame:
    - Se inicializa `frameBuffer` a negro (`fill(0)`).
@@ -90,7 +90,7 @@ En `encodeFileToStream`:
        - Si el archivo es vacío, se manda un frame negro y se cierra stdin de FFmpeg.
        - Si no, se cierra stdin directamente.
      - Se obtiene `rgb = encoderConfig.PALETTE[colorIndex]`.
-     - Se rellenan los 40×40 píxeles del bloque:
+     - Se rellenan los 20×20 píxeles del bloque:
        - `pixelX = col * BLOCK_SIZE + x`, `pixelY = row * BLOCK_SIZE + y`.
        - Índice en el buffer: `pixelIndex = (pixelY * WIDTH + pixelX) * 3`.
 3. Al terminar el frame:
@@ -103,9 +103,9 @@ En `encodeFileToStream`:
 Encoder invoca FFmpeg vía `child_process.spawn`:
 
 - Entrada (`stdin` de FFmpeg):
-  - `-f rawvideo`, `-pixel_format rgb24`, `-video_size 1920x1080`, `-framerate 10`, `-i pipe:0`.
+  - `-f rawvideo`, `-pixel_format rgb24`, `-video_size 640x360`, `-framerate 10`, `-i pipe:0`.
 - Modo lossy (pensado para YouTube y round-trip decodificable):
-  - `-r 10`, `-c:v libx264`, `-profile:v main`, `-preset medium`, `-crf 14`, `-pix_fmt yuv420p`, `-movflags +faststart`, salida `.mp4`.
+  - `-r 10`, `-c:v libx264`, `-profile:v main`, `-tune animation`, `-preset slower`, `-crf 26`, `-pix_fmt yuv420p`, `-movflags +faststart`, salida `.mp4`.
 - Modo lossless (pruebas locales):
   - `-c:v ffv1`, `-pix_fmt rgb24`, `-r 10`, salida `.mkv`.
 
@@ -123,7 +123,7 @@ El decoder arranca un proceso FFmpeg:
 
 - `-i inputPath`: lee cualquier contenedor (mp4, mkv, stream de YouTube descargado).
 - `-r FPS`: normaliza a la misma tasa que el encoder (10 fps).
-- `-f rawvideo -pix_fmt rgb24 -s 1920x1080 -`: FFmpeg escribe frames RGB24 en `stdout`.
+- `-f rawvideo -pix_fmt rgb24 -s 640x360 -`: FFmpeg escribe frames RGB24 en `stdout`.
 
 En Node:
 
@@ -136,7 +136,7 @@ En Node:
 
 Debido a la compresión (H.264 + YUV420p), los colores rara vez llegan pixel-perfect.
 
-Para cada bloque 40×40:
+Para cada bloque 20×20:
 
 1. Se inicializa un array `counts[0..7] = 0`.
 2. Para cada píxel del bloque:
@@ -384,8 +384,8 @@ Si construyes en un Mac con chip Apple (M1/M2/M4) la imagen queda **arm64**. En 
 ## Limitaciones actuales y posibles mejoras
 
 - JobStore solo en memoria (no apto para múltiples réplicas ni reinicios).
-- El decoder asume resolución fija 1920×1080 y bloques 40×40; cambiar esto rompe la compatibilidad binaria.
-- El voto de mayoría es robusto pero pesado (40×40×1296 píxeles por frame). Se podría optimizar:
+- El decoder asume resolución fija 640×360 y bloques 20×20; cambiar estos valores rompe la compatibilidad con videos ya generados.
+- El voto de mayoría es robusto pero pesado (20×20×576 píxeles por frame). Se podría optimizar:
   - Muestreando una sub-rejilla de píxeles por bloque.
   - Usando `Uint32Array` y buffers tipados.
 - No hay autenticación ni control de tamaño máximo de archivo/video (pendiente para un entorno multi-tenant).

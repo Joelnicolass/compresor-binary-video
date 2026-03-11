@@ -14,11 +14,11 @@ export const config = {
   isProduction: env.NODE_ENV === 'production',
 };
 
-/** Parámetros del encoder (YouTube Infinite Storage – Base-8) */
+/** Parámetros del encoder (YouTube Infinite Storage – Base-8). 360p + bloques 20×20 para minimizar peso. */
 export const encoderConfig = {
-  WIDTH: 1920,
-  HEIGHT: 1080,
-  BLOCK_SIZE: 40,
+  WIDTH: 640,
+  HEIGHT: 360,
+  BLOCK_SIZE: 20,
   FPS: 10,
   /** Paleta Base-8 [R,G,B] para escritura rápida en buffer RGB */
   PALETTE: [

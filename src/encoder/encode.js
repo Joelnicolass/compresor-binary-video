@@ -45,7 +45,6 @@ export function encodeFileToStream(inputPath, outputPath, options = {}) {
         outputPath,
       );
     } else {
-      // Perfil similar al MP4 que devuelve YouTube: 10 fps, Main, más calidad para conservar bloques.
       args.push(
         "-r",
         String(encoderConfig.FPS),
@@ -53,10 +52,12 @@ export function encodeFileToStream(inputPath, outputPath, options = {}) {
         "libx264",
         "-profile:v",
         "main",
+        "-tune",
+        "animation",
         "-preset",
-        "medium",
+        "slower",
         "-crf",
-        "14",
+        "26",
         "-pix_fmt",
         "yuv420p",
         "-movflags",

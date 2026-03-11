@@ -8,3 +8,4 @@ build/
 uploads/
 tmp/
 *.mp4
+docker-push.sh
