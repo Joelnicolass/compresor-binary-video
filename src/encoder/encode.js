@@ -1,7 +1,7 @@
-import { spawn } from 'child_process';
-import fs from 'fs';
-import { encoderConfig } from '../config/index.js';
-import { BitReader } from '../utils/bit-reader.js';
+import { spawn } from "child_process";
+import fs from "fs";
+import { encoderConfig } from "../config/index.js";
+import { BitReader } from "../utils/bit-reader.js";
 
 const COLS = encoderConfig.WIDTH / encoderConfig.BLOCK_SIZE;
 const ROWS = encoderConfig.HEIGHT / encoderConfig.BLOCK_SIZE;
@@ -22,22 +22,52 @@ export function encodeFileToStream(inputPath, outputPath, options = {}) {
     const bitReader = new BitReader(withLength);
 
     const args = [
-      '-y',
-      '-f', 'rawvideo',
-      '-pixel_format', 'rgb24',
-      '-video_size', `${encoderConfig.WIDTH}x${encoderConfig.HEIGHT}`,
-      '-framerate', String(encoderConfig.FPS),
-      '-i', 'pipe:0',
+      "-y",
+      "-f",
+      "rawvideo",
+      "-pixel_format",
+      "rgb24",
+      "-video_size",
+      `${encoderConfig.WIDTH}x${encoderConfig.HEIGHT}`,
+      "-framerate",
+      String(encoderConfig.FPS),
+      "-i",
+      "pipe:0",
     ];
     if (lossless) {
-      args.push('-c:v', 'ffv1', '-pix_fmt', 'rgb24', '-r', String(encoderConfig.FPS), outputPath);
+      args.push(
+        "-c:v",
+        "ffv1",
+        "-pix_fmt",
+        "rgb24",
+        "-r",
+        String(encoderConfig.FPS),
+        outputPath,
+      );
     } else {
-      args.push('-r', '30', '-c:v', 'libx264', '-preset', 'fast', '-crf', '18', '-pix_fmt', 'yuv420p', outputPath);
+      // Perfil similar al MP4 que devuelve YouTube: 10 fps, Main, más calidad para conservar bloques.
+      args.push(
+        "-r",
+        String(encoderConfig.FPS),
+        "-c:v",
+        "libx264",
+        "-profile:v",
+        "main",
+        "-preset",
+        "medium",
+        "-crf",
+        "14",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        outputPath,
+      );
     }
-    const ffmpeg = spawn('ffmpeg', args);
+    const ffmpeg = spawn("ffmpeg", args);
 
-    ffmpeg.on('error', (err) => reject(err));
-    ffmpeg.on('close', (code) => {
+    ffmpeg.on("error", (err) => reject(err));
+    ffmpeg.on("close", (code) => {
       if (code === 0) resolve(outputPath);
       else reject(new Error(`FFmpeg salió con código ${code}`));
     });
@@ -55,7 +85,9 @@ export function encodeFileToStream(inputPath, outputPath, options = {}) {
             if (withLength.length === 0) {
               // Archivo vacío: enviar un frame negro para que FFmpeg no falle
               if (!ffmpeg.stdin.write(frameBuffer)) {
-                ffmpeg.stdin.once('drain', () => { ffmpeg.stdin.end(); });
+                ffmpeg.stdin.once("drain", () => {
+                  ffmpeg.stdin.end();
+                });
               } else {
                 ffmpeg.stdin.end();
               }
@@ -81,7 +113,7 @@ export function encodeFileToStream(inputPath, outputPath, options = {}) {
       }
 
       if (!ffmpeg.stdin.write(frameBuffer)) {
-        ffmpeg.stdin.once('drain', processNextFrame);
+        ffmpeg.stdin.once("drain", processNextFrame);
       } else {
         setImmediate(processNextFrame);
       }
