@@ -328,7 +328,7 @@ Este flujo está sujeto a la compresión de YouTube; el voto de mayoría por blo
 
 ### 4. Docker
 
-Build:
+Build local (usa la arquitectura de tu máquina):
 
 ```bash
 docker build -t youtube-infinite-storage .
@@ -344,31 +344,36 @@ FFmpeg y `youtube-dl-exec` quedan instalados dentro de la imagen; solo necesitas
 
 ### 4.1. Subir la imagen a Docker Hub
 
+Si construyes en un Mac con chip Apple (M1/M2/M4) la imagen queda **arm64**. En Docker Hub y en muchos servidores (Linux x86) se espera **linux/amd64**, y al hacer `docker push` puede aparecer el error *"no hay variante amd64/linux"*. Hay que construir la imagen para esa plataforma (o varias) con **buildx**.
+
 1. **Crear cuenta** en [Docker Hub](https://hub.docker.com) si no tienes una.
 
 2. **Iniciar sesión** en la CLI:
    ```bash
    docker login
    ```
-   (Usuario y contraseña de Docker Hub.)
 
-3. **Construir** la imagen (si aún no lo hiciste):
+3. **Construir y subir en un solo paso** (recomendado para Docker Hub), generando imagen **linux/amd64** (y opcionalmente arm64):
    ```bash
-   docker build -t youtube-infinite-storage .
+   docker buildx build --platform linux/amd64,linux/arm64 \
+     -t TU_USUARIO/youtube-infinite-storage:latest \
+     --push .
+   ```
+   Sustituye `TU_USUARIO` por tu usuario de Docker Hub. Con eso la imagen queda en Docker Hub con variantes amd64 y arm64.
+
+   Si solo necesitas **amd64** (servidores x86 típicos):
+   ```bash
+   docker buildx build --platform linux/amd64 \
+     -t TU_USUARIO/youtube-infinite-storage:latest \
+     --push .
    ```
 
-4. **Etiquetar** la imagen con tu usuario y nombre del repositorio en Docker Hub:
+   La primera vez puede hacer falta crear un builder multi-plataforma:
    ```bash
-   docker tag youtube-infinite-storage TU_USUARIO/youtube-infinite-storage:latest
-   ```
-   Sustituye `TU_USUARIO` por tu usuario de Docker Hub. Puedes usar otro nombre de repositorio (ej. `compresor`) y otra etiqueta (ej. `v1.0`) en lugar de `latest`.
-
-5. **Subir** la imagen:
-   ```bash
-   docker push TU_USUARIO/youtube-infinite-storage:latest
+   docker buildx create --name multi --use
    ```
 
-6. **Ejecutar la imagen desde Docker Hub** (en otra máquina o para compartir):
+4. **Ejecutar la imagen desde Docker Hub** (en otra máquina o para compartir):
    ```bash
    docker pull TU_USUARIO/youtube-infinite-storage:latest
    docker run --rm -p 3000:3000 TU_USUARIO/youtube-infinite-storage:latest
