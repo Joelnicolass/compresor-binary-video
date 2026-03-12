@@ -14,6 +14,22 @@ export const config = {
   isProduction: env.NODE_ENV === 'production',
 };
 
+function parsePositiveInt(value, fallback) {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export const infraConfig = {
+  redisUrl: env.REDIS_URL ?? '',
+  rabbitmqUrl: env.RABBITMQ_URL ?? '',
+  jobTtlSeconds: parsePositiveInt(env.JOB_TTL_SECONDS, 60 * 60 * 24),
+  tmpFileMaxAgeSeconds: parsePositiveInt(
+    env.TMP_FILE_MAX_AGE_SECONDS,
+    60 * 60 * 24,
+  ),
+  cleanupJwtSecret: env.CLEANUP_JWT_SECRET ?? '',
+};
+
 /** Parámetros del encoder (YouTube Infinite Storage – Base-8). 360p + bloques 20×20 para minimizar peso. */
 export const encoderConfig = {
   WIDTH: 640,

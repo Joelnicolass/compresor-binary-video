@@ -21,10 +21,12 @@ API en Node.js + Express que transforma cualquier archivo binario en un video y 
 - `src/utils/bit-reader.js`: lector de bits (3 en 3) sobre un buffer arbitrario.
 - `src/encoder/encode.js`: encoder binario → frames RGB → FFmpeg (stdin rawvideo).
 - `src/decoder/decode.js`: decoder video → frames RGB → bits → buffer binario.
-- `src/services/jobStore.js`: job queue en memoria (processing, completed, error).
+- `src/services/jobStore.js`: job store async (Redis con TTL; fallback en memoria si falta `REDIS_URL`).
+- `src/services/redis.js`: cliente Redis (persistencia de jobs con TTL).
+- `src/services/rabbit.js`: publicador de eventos de jobs y mantenimiento.
 - `src/services/youtube.js`: descarga videos de YouTube vía `youtube-dl-exec` (yt-dlp local en `node_modules`).
 - `src/controllers/*.js`: lógica de los endpoints.
-- `src/routes/*.js`: wiring REST (`/api/encode`, `/api/decode`, `/api/decode-from-youtube`, `/api/status`, `/api/download`, `/api/health`).
+- `src/routes/*.js`: wiring REST (`/api/encode`, `/api/decode`, `/api/decode-from-youtube`, `/api/status`, `/api/download`, `/api/health`, `/api/maintenance/cleanup`).
 
 ---
 
@@ -205,13 +207,86 @@ Arquitectura asíncrona basada en jobs para sobrevivir a timeouts estrictos de P
     - El archivo binario original reconstruido (para decode).
   - Una vez descargado, se borra el archivo del disco y se limpia el job.
 
-### JobStore en memoria
+- **Limpieza de temporales (cron/Lambda)**
+  - `POST /api/maintenance/cleanup`
+  - Requiere `Authorization: Bearer <JWT>`
+  - Elimina archivos/carpetas antiguas en `tmp/uploads`, `tmp/outputs`, `tmp/decoded`, `tmp/downloads`.
+  - Devuelve métricas (`scanned`, `deleted`, `errors`, `durationMs`).
+
+### JobStore (Redis + TTL)
 
 Archivo: `src/services/jobStore.js`.
 
-- Implementado como `Map<string, Job>`.
+- Persistido en Redis como `job:{jobId}`.
 - `set(jobId, data)`, `get(jobId)`, `remove(jobId)`.
-- Suficiente para un MVP/single-instance; en producción se sustituiría por Redis o una BD.
+- Cada escritura renueva TTL (`JOB_TTL_SECONDS`) para evitar crecimiento infinito.
+- Si `REDIS_URL` no está configurado, usa fallback en memoria para desarrollo local.
+
+---
+
+## Configuración de infraestructura (Railway)
+
+Variables recomendadas:
+
+```bash
+REDIS_URL=redis://...
+RABBITMQ_URL=amqp://...
+JOB_TTL_SECONDS=86400
+TMP_FILE_MAX_AGE_SECONDS=86400
+CLEANUP_JWT_SECRET=tu_secreto_largo
+```
+
+Notas:
+
+- `REDIS_URL`: persistencia de jobs (`job:{jobId}` con TTL).
+- `RABBITMQ_URL`: publicación de eventos `job.created`, `job.completed`, `job.failed`, `job.downloaded`, `maintenance.cleanup.executed`.
+- `JOB_TTL_SECONDS`: tiempo de vida de jobs en Redis.
+- `TMP_FILE_MAX_AGE_SECONDS`: antigüedad mínima para que el cleanup elimine archivos.
+- `CLEANUP_JWT_SECRET`: secreto HMAC para validar el JWT del endpoint de mantenimiento.
+
+---
+
+## Cron con Lambda para limpieza de temporales
+
+### 1) Generar JWT HS256
+
+Ejemplo rápido en Node.js:
+
+```bash
+node -e "import jwt from 'jsonwebtoken'; console.log(jwt.sign({ sub: 'cleanup-cron' }, process.env.CLEANUP_JWT_SECRET, { algorithm: 'HS256', expiresIn: '5m' }));"
+```
+
+### 2) Invocar endpoint desde Lambda
+
+```bash
+curl -X POST "https://TU_DOMINIO/api/maintenance/cleanup" \
+  -H "Authorization: Bearer TU_TOKEN_JWT"
+```
+
+La respuesta entrega métricas de limpieza para loguear en CloudWatch.
+
+---
+
+## RabbitMQ: ejemplo mínimo para aprender
+
+Consumidor simple de eventos:
+
+```js
+import amqp from 'amqplib';
+
+const conn = await amqp.connect(process.env.RABBITMQ_URL);
+const ch = await conn.createChannel();
+await ch.assertExchange('jobs.events', 'topic', { durable: true });
+const { queue } = await ch.assertQueue('', { exclusive: true });
+await ch.bindQueue(queue, 'jobs.events', 'job.#');
+await ch.bindQueue(queue, 'jobs.events', 'maintenance.#');
+
+ch.consume(queue, (msg) => {
+  if (!msg) return;
+  console.log(msg.fields.routingKey, msg.content.toString());
+  ch.ack(msg);
+});
+```
 
 ---
 
